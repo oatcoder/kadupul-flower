@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kadupul-flower
+  labels:
+    app: kadupul-flower
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kadupul-flower
+  template:
+    metadata:
+      labels:
+        app: kadupul-flower
+    spec:
+      containers:
+      - name: kadupul-flower
+        image: {{image}}
+        ports:
+        - containerPort: 80

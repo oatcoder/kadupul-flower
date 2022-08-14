@@ -1,0 +1,4 @@
+Flask==1.1.2
+pylint==2.5.3
+Flask-Cors==3.0.8
+requests==2.24.0

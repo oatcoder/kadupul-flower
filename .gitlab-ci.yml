@@ -1,0 +1,53 @@
+image: google/cloud-sdk:latest
+
+services:
+  - docker:dind
+
+stages:
+  - build
+  - deploy
+
+# Change pip's cache directory to be inside the project directory since we can
+# only cache local items.
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+# Pip's cache doesn't store the python packages
+# https://pip.pypa.io/en/stable/reference/pip_install/#caching
+#
+# If you want to also cache the installed packages, you have to install
+# them in a virtualenv and cache it as well.
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+build_image:
+  stage: build
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo $GCLOUD_API_KEYFILE > ~/.gcloud-api-key.json
+    - gcloud auth activate-service-account --key-file ~/.gcloud-api-key.json
+    - docker login -u _json_key --password-stdin https://$DOCKER_GCR_REPO_URL < ~/.gcloud-api-key.json
+  script:
+    - docker build -t "$CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA" .
+    - docker tag $CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA $DOCKER_GCR_REPO_URL/$GCP_PROJECT_ID/$CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA
+    - docker push $DOCKER_GCR_REPO_URL/$GCP_PROJECT_ID/$CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA
+  only:
+    - master
+
+deploy_to_gcp:
+  stage: deploy
+  before_script:
+    - echo $GCLOUD_API_KEYFILE > ~/.gcloud-api-key.json
+    - gcloud auth activate-service-account --key-file ~/.gcloud-api-key.json
+    - sed -i "s|{{image}}|$DOCKER_GCR_REPO_URL/$GCP_PROJECT_ID/$CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA|g" deployment.yml
+  script:
+    - gcloud config set project $GCP_PROJECT_ID
+    - gcloud config set compute/zone $GCP_ZONE
+    - gcloud container clusters get-credentials $GCP_CLUSTER_NAME
+    - kubectl apply -f deployment.yml
+  only:
+    - master
